@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+  <body style="font-family:sans-serif;max-width:640px;margin:40px auto">
+    <h1>PicToBeat (Image → Personalized Playlist)</h1>
+
+    <div id="status">🔒 Not connected</div>
+    <p>
+      <button id="connectBtn" type="button">Connect Spotify</button>
+      <!-- fallback link if popup blocked -->
+      <a id="fallbackLink" href="/login" style="margin-left:12px">Open in this tab</a>
+    </p>
+
+    <form action="/build" method="post" enctype="multipart/form-data">
+      <label>Upload an image:</label><br>
+      <input type="file" name="image" accept="image/*" required><br><br>
+      <label># of songs:</label>
+      <input type="number" name="ntracks" value="20" min="1" max="100"><br><br>
+      <button type="submit">Create Playlist</button>
+    </form>
+
+    <script>
+      // Open /login in a centered popup
+      const btn = document.getElementById('connectBtn');
+      btn.addEventListener('click', () => {
+        const w = 500, h = 650;
+        const y = window.top.outerHeight / 2 + window.top.screenY - (h / 2);
+        const x = window.top.outerWidth  / 2 + window.top.screenX - (w / 2);
+        const popup = window.open('/login', 'spotifyLogin',
+          `width=${w},height=${h},top=${y},left=${x},resizable,scrollbars`);
+        if (!popup) {
+          // Popup blocked – fall back to opening in this tab.
+          window.location = '/login';
+        }
+      });
+
+      // Receive success signal from /callback page (same-origin)
+      window.addEventListener('message', (event) => {
+        if (event.origin !== window.location.origin) return;
+        if (event.data && event.data.type === 'spotify-auth' && event.data.status === 'success') {
+          document.getElementById('status').textContent = '✅ Connected to Spotify';
+        }
+      });
+    </script>
+  </body>
+</html>
