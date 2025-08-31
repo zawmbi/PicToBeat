@@ -271,6 +271,36 @@
             <input class="slider" id="ntracks" name="ntracks" type="range" min="10" max="100" step="5" value="30" />
           </div>
           <div class="hint">Mix is ~60% from your history, ~40% discovery. We’ll keep the vibe consistent.</div>
+          <!-- Known vs New mix -->
+        <div class="mt-4">
+        <label for="mix_known" class="block font-medium mb-1">
+            Mix: <span id="mixKnownLabel">60</span>% known • <span id="mixNewLabel">40</span>% new
+        </label>
+        <input
+            type="range"
+            id="mix_known"
+            name="mix_known"
+            min="0" max="100" step="5"
+            value="60"
+            class="w-full"
+        />
+        <p class="text-sm text-gray-500">Drag left for fresher (more new), right for comfort (more known).</p>
+        </div>
+
+        <script>
+        (function () {
+            const slider = document.getElementById('mix_known');
+            const knownLbl = document.getElementById('mixKnownLabel');
+            const newLbl = document.getElementById('mixNewLabel');
+            function update() {
+            const k = parseInt(slider.value || '60', 10);
+            knownLbl.textContent = k;
+            newLbl.textContent = 100 - k;
+            }
+            slider.addEventListener('input', update);
+            update();
+        })();
+        </script>
 
           <div class="actions">
             <span class="spinner" id="spinner"></span>
@@ -294,6 +324,8 @@
   </div>
 
   <script>
+
+
     // --- UI state ---
     const drop = document.getElementById('dropzone');
     const input = document.getElementById('image');
@@ -342,6 +374,7 @@
       statusText.textContent = 'Connected to Spotify';
       sessionStorage.setItem('ptb_connected', '1');
     }
+    
     function markDisconnected(){
       dot.classList.remove('ok');
       statusText.textContent = 'Not connected to Spotify';
