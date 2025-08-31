@@ -9,7 +9,6 @@ import requests
 from requests.exceptions import HTTPError
 
 from spotify_oauth import auth_url, exchange_code_for_token, refresh_token as _refresh_token
-from mood_map import analyze_image_to_mood  # used if you want a local fallback (still okay)
 
 load_dotenv()
 app = FastAPI()
@@ -351,20 +350,13 @@ def _parse_responses_json(j: dict) -> dict:
 def _openai_image_mood(img_bytes: bytes, seed_list: list[str]) -> tuple[list[str], dict, list[str]]:
     api = os.getenv("OPENAI_API_KEY")
     if not api:
-        # try your local analyzer first
-        try:
-            mm = analyze_image_to_mood(img_bytes)
-            tags = [t for t in (mm.get("mood_words") or []) if t]
-            tgts = _normalize_targets(mm.get("targets") or {})
-            return (tags or ["vibe","mood"]), (tgts or {"valence":0.5,"energy":0.45,"danceability":0.45,"acousticness":0.6}), seed_list[:3]
-        except Exception:
-            return (["vibe","mood"], {"valence":0.5,"energy":0.45,"danceability":0.45,"acousticness":0.6}, seed_list[:3])
+        return (["vibe", "mood"], {"valence":0.5, "energy":0.45, "danceability":0.45, "acousticness":0.6}, seed_list[:3])
 
     b64 = base64.b64encode(img_bytes).decode()
     sys = (
         "You create Spotify playlists from a single photo. "
         "Return ONLY JSON with keys:\n"
-        '{ "tags":[6-10 short Gen-Z vibe tags], '
+        '{ "tags":[up to 5 short Gen-Z vibe descriptors], '
         '"targets":{"valence":0..1,"energy":0..1,"danceability":0..1,"acousticness":0..1}, '
         '"seed_genres":[<=3 items from provided list] }\n'
         "Rules: tags are 1–3 words, no hashtags/punctuation; coherent with the scene. "
@@ -380,7 +372,7 @@ def _openai_image_mood(img_bytes: bytes, seed_list: list[str]) -> tuple[list[str
             {"role": "system", "content": [{"type": "text", "text": sys}]},
             {"role": "user", "content": [
                 {"type": "input_text", "text": json.dumps(usr)},
-                {"type": "input_image", "image_data": b64, "mime_type": "image/jpeg"}
+                {"type": "input_image", "image_url": f"data:image/jpeg;base64,{b64}"}
             ]}
         ]
     }
@@ -399,10 +391,10 @@ def _openai_image_mood(img_bytes: bytes, seed_list: list[str]) -> tuple[list[str
         print("[PicToBeat] LLM tags:", tags)
         print("[PicToBeat] LLM targets:", tgts)
         print("[PicToBeat] LLM seeds:", seeds)
-        return tags[:10], tgts, seeds[:3]
+        return tags[:5], tgts, seeds[:3]
     except Exception as e:
         print("[PicToBeat] OpenAI error:", e)
-        return (["vibe","mood"], {"valence":0.5,"energy":0.45,"danceability":0.45,"acousticness":0.6}, seed_list[:3])
+        return (["vibe", "mood"], {"valence":0.5, "energy":0.45, "danceability":0.45, "acousticness":0.6}, seed_list[:3])
 
 # ------------------ known / new pools ------------------
 
@@ -687,18 +679,37 @@ async def build(
         if t not in chosen:
             chosen.append(t)
 
-    if len(chosen) < total:
-        # prefer more fresh first
+    remaining_new = max(0, want_new - len(new_take))
+    remaining_known = max(0, want_known - len(known_take))
+
+    if remaining_new > 0:
         for t in fresh_rank:
             if t not in chosen and t not in avoid_tracks:
                 chosen.append(t)
-            if len(chosen) >= total: break
+                remaining_new -= 1
+            if remaining_new <= 0:
+                break
 
-    if len(chosen) < total:
+    if remaining_known > 0:
         for t in known_rank:
             if t not in chosen:
                 chosen.append(t)
-            if len(chosen) >= total: break
+                remaining_known -= 1
+            if remaining_known <= 0:
+                break
+
+    if len(chosen) < total:
+        for t in fresh_rank:
+            if len(chosen) >= total:
+                break
+            if t not in chosen and t not in avoid_tracks:
+                chosen.append(t)
+        if len(chosen) < total:
+            for t in known_rank:
+                if len(chosen) >= total:
+                    break
+                if t not in chosen:
+                    chosen.append(t)
 
     if not chosen:
         return HTMLResponse("""
